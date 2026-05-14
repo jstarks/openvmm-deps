@@ -82,6 +82,9 @@ COPY --from=build-shell --link /out/sysroot.cpio.gz /shell.cpio.gz
 # linux v6.1.74 (linux-6.1.y)
 FROM scratch AS src-linux
 ADD --link https://github.com/gregkh/linux.git#8fd7f44624538675abadc73f5a44e95016964d22 /
+# linux v6.18.29 (linux-6.18.y)
+FROM scratch AS src-linux-6.18
+ADD --link https://github.com/gregkh/linux.git#d31a849ff5011dad5c271b53819a0b279e367d68 /
 # llvm-project (release/17.x) -- used by libunwind and sdk
 FROM scratch AS src-llvm
 ADD --link https://github.com/llvm/llvm-project.git#6009708b4367171ccdbf4b5905cb6a803753fe18 /
@@ -116,13 +119,21 @@ RUN BUILD_CPIO=1 /pkg/Tools/build.sh sysroots/initrd
 FROM scratch AS result-initrd
 COPY --from=build-initrd --link /out/sysroot.cpio.gz /initrd
 
-# Build the Linux test package.
+# Build the Linux 6.1 test package.
 FROM --platform=$BUILDPLATFORM package-builder AS build-linux
 RUN --mount=type=bind,from=src-linux,source=/,target=/pkg/linux/src \
     /pkg/Tools/build.sh sysroots/linux
 FROM scratch AS result-linux
-COPY --from=build-linux --link /sysroot/boot /
-COPY --from=result-initrd --link / /
+COPY --from=build-linux --link /sysroot/boot /linux-6.1/
+COPY --from=result-initrd --link / /linux-6.1/
+
+# Build the Linux 6.18 test package.
+FROM --platform=$BUILDPLATFORM package-builder AS build-linux-6.18
+RUN --mount=type=bind,from=src-linux-6.18,source=/,target=/pkg/linux-6.18/src \
+    /pkg/Tools/build.sh sysroots/linux-6.18
+FROM scratch AS result-linux-6.18
+COPY --from=build-linux-6.18 --link /sysroot/boot /linux-6.18/
+COPY --from=result-initrd --link / /linux-6.18/
 
 FROM --platform=$BUILDPLATFORM package-builder AS result-libunwind
 RUN --mount=type=bind,from=src-llvm,source=/,target=/pkg/libunwind/src \
@@ -145,4 +156,5 @@ COPY --from=result-dbgrd --link / /
 COPY --from=result-shell --link / /
 COPY --from=result-sdk --link / /
 COPY --from=result-linux --link / /
+COPY --from=result-linux-6.18 --link / /
 COPY --from=result-petritools --link / /
